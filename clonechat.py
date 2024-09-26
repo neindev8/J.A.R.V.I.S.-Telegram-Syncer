@@ -1,10 +1,11 @@
+# clonechat.py
+
 import argparse
 import json
 import os
 import sys
 import time
 import threading
-import random
 from configparser import ConfigParser
 
 import pyrogram
@@ -284,7 +285,6 @@ def get_sender(message):
         return forward_poll
     if message.service:
         return None
-
     return None
 
 
@@ -464,7 +464,16 @@ def ensure_folder_existence(folder_path):
 def get_task_file(origin_chat_title, destination_chats):
     ensure_folder_existence("user")
     ensure_folder_existence(os.path.join("user", "tasks"))
-    dest_str = "-".join(map(str, destination_chats))
+    
+    # Verificar si destination_chats es una lista de tuplas o de strings
+    if isinstance(destination_chats[0], tuple) and len(destination_chats[0]) == 2:
+        dest_str = "-".join([chat_input for chat_input, _ in destination_chats])
+    elif isinstance(destination_chats[0], str):
+        dest_str = "-".join(destination_chats)
+    else:
+        print("Formato inesperado para destination_chats.")
+        dest_str = "destinacion_invalida"
+    
     task_file_name = f"{origin_chat_title}-{dest_str}.json"
     task_file_path = os.path.join("user", "tasks", task_file_name)
     return task_file_path
@@ -619,7 +628,7 @@ def ensure_connection(mode, config_file):
                 exit(1)
             try:
                 bot = pyrogram.Client(
-                    "bot", api_id=int(api_id), api_hash=api_hash, bot_token=bot_token
+                    "bot", api_id=int(api_id), api_hash=config_file["default"].get("api_hash"), bot_token=bot_token
                 )
                 bot.start()
                 print("Cliente de bot iniciado correctamente después de ingresar credenciales.")
@@ -705,37 +714,6 @@ def load_last_chats():
         return None, None
 
 
-def get_user_input(prompt, timeout):
-    print(prompt)
-    sys.stdout.flush()
-    try:
-        import msvcrt
-        start_time = time.time()
-        input_str = ''
-        while True:
-            if msvcrt.kbhit():
-                char = msvcrt.getwch()
-                if char == '\r':
-                    print('')
-                    return input_str
-                elif char == '\b':
-                    input_str = input_str[:-1]
-                    print(' \b', end='', flush=True)
-                else:
-                    input_str += char
-                    print(char, end='', flush=True)
-            if time.time() - start_time > timeout:
-                print('')
-                return None
-    except ImportError:
-        import select
-        ready, _, _ = select.select([sys.stdin], [], [], timeout)
-        if ready:
-            return sys.stdin.readline().strip()
-        else:
-            return None
-
-
 def monitor_keyboard():
     while not EXIT_EVENT.is_set():
         user_input = sys.stdin.readline().strip().upper()
@@ -754,11 +732,11 @@ def get_config_data(path_file_config="user/config.ini"):
     return config_file
 
 
-def main():
+def main(args=None):
     global tg, FILES_TYPE_EXCLUDED, DELAY_AMOUNT, DELAY_SKIP, destination_chats
 
     print(
-        f"\n....:: Clonechat - v0.5.1.1 rawr5-skip ::....\n"
+        f"\n....:: Clonechat - v0.5.1.1 rawr5-skip2 ::....\n"
         + "github.com/apenasrr/clonechat/\n"
     )
 
@@ -792,7 +770,7 @@ def main():
         description="Clonar chats de Telegram de un chat a otro."
     )
     parser.add_argument("--orig", type=str, help="chat_id o username del chat/grupo/canal de origen")
-    parser.add_argument("--dest", type=str, help="chat_id o username del chat/grupo/canal de destino")
+    parser.add_argument("--dest", type=str, nargs='+', help="chat_id o username del chat/grupo/canal de destino (puedes especificar múltiples destinos separados por espacio)")
     parser.add_argument(
         "--mode",
         choices=["user", "bot"],
@@ -813,7 +791,12 @@ def main():
 8 = Videos
 9 = Encuestas"""
     parser.add_argument("--type", help=help_type)
-    options = parser.parse_args()
+    parser.add_argument("--clone-mode", choices=['T', 'G', 'C'], help="Modo de clonación para 'Todos los archivos (0)'")
+    parser.add_argument("--limit-standalone-images", choices=['on', 'off'], help="Limitar imágenes individuales")
+    parser.add_argument("--skip-delay", type=float, help="Tiempo de espera al omitir mensajes")
+    parser.add_argument("--user-delay", type=float, help="Tiempo de espera entre mensajes en modo usuario")
+    parser.add_argument("--bot-delay", type=float, help="Tiempo de espera entre mensajes en modo bot")
+    options = parser.parse_args(args)
 
     MODE = options.mode if options.mode else config_file["default"].get("mode", "user")
 
@@ -823,7 +806,13 @@ def main():
     else:
         DELAY_AMOUNT = USER_DELAY_SECONDS
 
-    DELAY_SKIP = SKIP_DELAY_SECONDS
+    if options.user_delay:
+        DELAY_AMOUNT = options.user_delay
+    if options.bot_delay and MODE == "bot":
+        DELAY_AMOUNT = options.bot_delay
+    if options.skip_delay:
+        DELAY_SKIP = options.skip_delay
+    LIMIT_STANDALONE_IMAGES = options.limit_standalone_images if options.limit_standalone_images else LIMIT_STANDALONE_IMAGES
 
     NEW = options.new if options.new else task_type_selection()
 
@@ -838,15 +827,15 @@ def main():
 
         if use_last_chats:
             origin_chat_input = last_origin_chat_input
-        elif options.orig is None:
+        elif options.orig:
+            origin_chat_input = options.orig.strip()
+        else:
             while True:
                 origin_chat_input = input("Ingresa el chat_id o username del origen: ").strip()
                 if not origin_chat_input:
                     print("Entrada vacía. Inténtalo de nuevo.")
                     continue
                 break
-        else:
-            origin_chat_input = options.orig.strip()
 
         origin_chat_int = normalize_chat_id(origin_chat_input)
         if origin_chat_int is None:
@@ -857,6 +846,8 @@ def main():
 
         if use_last_chats:
             destination_chats_inputs = last_destination_chats
+        elif options.dest:
+            destination_chats_inputs = options.dest
         else:
             destination_chats_inputs = []
             while True:
@@ -890,7 +881,19 @@ def main():
 
         save_last_chats(origin_chat_input, [chat_input for chat_input, _ in destination_chats])
 
-        if options.type is None:
+        if options.type:
+            TYPE = options.type.strip()
+            if "0" in TYPE:
+                clone_mode = options.clone_mode if options.clone_mode else get_clone_mode()
+                if clone_mode in ['G', 'C']:
+                    album_destination_input, image_destination_input = select_destination_groups([chat_input for chat_input, _ in destination_chats])
+                else:
+                    album_destination_input = image_destination_input = None
+            else:
+                clone_mode = None
+                album_destination_input, image_destination_input = None, None
+            FILES_TYPE_EXCLUDED = get_files_type_excluded_by_input(TYPE, [])
+        else:
             input_type = get_input_type_to_copy()
             if "0" in input_type:
                 clone_mode = get_clone_mode()
@@ -902,18 +905,6 @@ def main():
                 clone_mode = None
                 album_destination_input, image_destination_input = None, None
             FILES_TYPE_EXCLUDED = get_files_type_excluded_by_input(input_type, [])
-        else:
-            TYPE = options.type.strip()
-            if "0" in TYPE:
-                clone_mode = get_clone_mode()
-                if clone_mode in ['G', 'C']:
-                    album_destination_input, image_destination_input = select_destination_groups([chat_input for chat_input, _ in destination_chats])
-                else:
-                    album_destination_input = image_destination_input = None
-            else:
-                clone_mode = None
-                album_destination_input, image_destination_input = None, None
-            FILES_TYPE_EXCLUDED = get_files_type_excluded_by_input(TYPE, [])
 
         album_destination = None
         image_destination = None
