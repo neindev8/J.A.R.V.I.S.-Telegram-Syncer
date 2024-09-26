@@ -1,0 +1,27 @@
+# Telegram API
+pyrogram
+tgcrypto
+
+# Colores y formato de la consola
+colorama
+
+# Para la interacción en la línea de comandos
+prompt_toolkit
+
+# Para facilitar el manejo de configuraciones
+configparser
+
+# Manejo de archivos multimedia y tiempo
+Pillow
+
+# Para manejar el tiempo en diferentes procesos y multi-threading
+schedule
+
+# Manejo de archivos CSV y JSON
+pandas
+
+# Ayuda con operaciones de subprocess
+subprocess.run
+
+# Opcional: Si planeas usar el módulo de logger (si no está ya integrado):
+loguru
