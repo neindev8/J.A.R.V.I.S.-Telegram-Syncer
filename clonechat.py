@@ -430,8 +430,13 @@ def task_type_selection():
 
 
 def get_last_message_id(origin_chat):
-    if tg.is_bot:
-        print("No se puede obtener el historial de mensajes en modo bot. Estableciendo last_message_id a 0.")
+    try:
+        me = tg.get_me()
+        if me.is_bot:
+            print("No se puede obtener el historial de mensajes en modo bot. Estableciendo last_message_id a 0.")
+            return 0
+    except Exception as e:
+        print(f"Error al obtener información del usuario: {e}")
         return 0
     try:
         iter_message = tg.get_chat_history(origin_chat)
