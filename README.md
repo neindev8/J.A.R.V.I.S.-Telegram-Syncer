@@ -1,4 +1,4 @@
-Clonechat v0.5.1.1 rawr5-skip2
+*J.A.R.V.I.S. Telegram Syncer*
 Clona todas las publicaciones del historial de un canal o grupo de Telegram a otro canal o grupo.
 
 Nuevas características en v0.5.1.1 rawr5-skip2:
