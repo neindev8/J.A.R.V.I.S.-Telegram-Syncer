@@ -1,4 +1,7 @@
-# clonechat.py
+# J.A.R.V.I.S. Telegram Syncer
+# Creado por MidRoark, con ayuda de Rutilon Arkanic (2024)
+# Basado en un proyecto 2022 de apenasrr
+# Versión: Savage Version 0.5.3 rawr2
 
 import argparse
 import json
@@ -407,10 +410,11 @@ def get_message(origin_chat, message_id):
 
 
 def task_type_selection():
-    print("¿Nuevo clon, continuación o reclonar archivos omitidos?")
+    print("¿Nuevo clon, continuación, reclonar archivos omitidos o comenzar clonación desde punto de partida?")
     print("1 = Nuevo")
     print("2 = Reanudar")
     print("3 = Reclonar archivos omitidos")
+    print("4 = Comenzar clonación desde punto de partida")
     while True:
         answer = input("Tu respuesta: ")
         if answer == "1":
@@ -419,6 +423,8 @@ def task_type_selection():
             return 2
         elif answer == "3":
             return 3
+        elif answer == "4":
+            return 4
         else:
             print("\nRespuesta inválida.\n")
 
@@ -638,8 +644,8 @@ def ensure_connection(mode, config_file):
                 exit(1)
 
 
-def log_clone_history(origin_chat_title, destination_chat_ids, posicion, numero, nombre, file_id, tipo, status):
-    history_file = "clone_history.txt"
+def log_clone_history(origin_chat_title, destination_chat_ids, posicion, numero, nombre, file_id, tipo, status, spawn=False):
+    history_file = "clone_history.txt" if not spawn else "clone_spawn.txt"
     ensure_folder_existence("user")
     with open(history_file, "a", encoding='utf-8') as f:
         if posicion == 1 and numero == 1:
@@ -721,6 +727,9 @@ def monitor_keyboard():
             print("Proceso pausado. Regresando al menú de selección de archivos.")
             PAUSE_EVENT.set()
         elif user_input == 'S':
+            print("Comenzando clonación desde punto de partida.")
+            # Aquí se puede implementar lógica adicional si se desea iniciar clonación desde teclado
+        elif user_input == 'Q':
             print("Saliendo del programa.")
             EXIT_EVENT.set()
             os._exit(0)
@@ -732,11 +741,68 @@ def get_config_data(path_file_config="user/config.ini"):
     return config_file
 
 
+def parse_message_ranges(input_string):
+    """
+    Parse the input string for message ranges.
+    Returns a list of tuples with (start, end). 'end' can be None if not specified.
+    """
+    ranges = []
+    parts = input_string.split('+')
+    for part in parts:
+        if '-' in part:
+            start, end = part.split('-')
+            try:
+                start = int(start.replace(',', ''))
+                end = int(end.replace(',', ''))
+                ranges.append((start, end))
+            except ValueError:
+                print(f"Formato inválido en rango: {part}. Se omitirá.")
+        else:
+            try:
+                start = int(part.replace(',', ''))
+                ranges.append((start, None))  # None implies cloning until the end
+            except ValueError:
+                # Attempt to parse UUID if not an integer
+                ranges.append((part.strip(), None))
+    return ranges
+
+
+def is_message_in_ranges(message_id, uuid, ranges):
+    """
+    Determine if a message should be cloned based on ranges.
+    If ranges contain UUIDs, handle accordingly.
+    """
+    for start, end in ranges:
+        if isinstance(start, int):
+            if end is None:
+                if message_id >= start:
+                    return True
+            else:
+                if start <= message_id <= end:
+                    return True
+        else:
+            # Assume 'start' is a UUID
+            # Implement UUID to message_id mapping if necessary
+            # Placeholder for actual UUID handling
+            if message_id == uuid_to_message_id(start):
+                return True
+    return False
+
+
+def uuid_to_message_id(uuid):
+    """
+    Placeholder function to convert UUID to message_id.
+    Implement actual logic based on how UUIDs map to message_ids.
+    """
+    # Implement the actual mapping logic here
+    return None  # Placeholder
+
+
 def main(args=None):
     global tg, FILES_TYPE_EXCLUDED, DELAY_AMOUNT, DELAY_SKIP, destination_chats
 
     print(
-        f"\n....:: Clonechat - v0.5.1.1 rawr5-skip2 ::....\n"
+        f"\n....:: J.A.R.V.I.S. Telegram Syncer - Savage Version 0.5.3 rawr2 ::....\n"
         + "github.com/apenasrr/clonechat/\n"
     )
 
@@ -777,7 +843,7 @@ def main(args=None):
         help='"user" es lento. "bot" requiere token_bot en las credenciales.',
     )
     parser.add_argument(
-        "--new", type=int, choices=[1, 2, 3], help="1 = nuevo, 2 = reanudar, 3 = reclonar omitidos"
+        "--new", type=int, choices=[1, 2, 3, 4], help="1 = nuevo, 2 = reanudar, 3 = reclonar omitidos, 4 = comenzar clonación desde punto de partida"
     )
     help_type = """Lista separada por comas de tipo de mensaje a clonar:
 0 = Todos los archivos
@@ -924,10 +990,12 @@ def main(args=None):
             last_message_id = get_last_message_id(origin_chat_int)
             list_posted = get_list_posted(NEW, CACHE_FILE)
             message_id = list_posted[-1] if list_posted else 0
+            spawn_file = False
         elif NEW == 2:
             last_message_id = get_last_message_id(origin_chat_int)
             list_posted = get_list_posted(NEW, CACHE_FILE)
             message_id = list_posted[-1] if list_posted else 0
+            spawn_file = False
         elif NEW == 3:
             list_posted = []
             reclone_message_ids = []
@@ -959,9 +1027,48 @@ def main(args=None):
                     print("Finalizando el programa. ¡Hasta luego!")
                     exit(0)
                 message_id = 0
+                spawn_file = False
             else:
                 print("No existe el archivo clone_history.txt. No hay archivos omitidos para reclonar.")
                 exit(0)
+        elif NEW == 4:
+            print("=== Comenzar Clonación desde Punto de Partida ===")
+            input_ranges = input("Ingresa el/los rango(s) de mensajes a clonar (e.g., 55456-69699+75999-99000 o UUIDs): ").strip()
+            ranges = parse_message_ranges(input_ranges)
+            if not ranges:
+                print("No se ingresaron rangos válidos. Volviendo al menú principal.")
+                NEW = task_type_selection()
+                continue
+            list_posted = []
+            message_id = 0
+            last_message_id = get_last_message_id(origin_chat_int)
+            spawn_file = True  # Indica que se usará clone_spawn.txt
+        else:
+            print("Opción de tarea no válida.")
+            break
+
+        if NEW != 4:
+            # Para modos 1, 2, 3, usar clone_history.txt
+            spawn_file = False
+
+        # Seleccionar el archivo de clonación adecuado
+        CACHE_FILE = "clone_spawn.txt" if spawn_file else CACHE_FILE
+
+        if NEW == 4:
+            # Guardar los rangos en clone_spawn.txt
+            with open("clone_spawn.txt", "w", encoding='utf-8') as f_spawn:
+                json.dump({"ranges": ranges}, f_spawn)
+            log_clone_history(
+                ORIGIN_CHAT_TITLE,
+                [chat_input for chat_input, _ in destination_chats],
+                posicion=0,
+                numero=0,
+                nombre="Inicio clonación desde punto de partida",
+                file_id="N/A",
+                tipo="start_point",
+                status="iniciado",
+                spawn=True
+            )
 
         keyboard_thread = threading.Thread(target=monitor_keyboard, daemon=True)
         keyboard_thread.start()
@@ -974,7 +1081,7 @@ def main(args=None):
 
         history_cloned = set()
         history_omitted = set()
-        if os.path.exists("clone_history.txt"):
+        if not spawn_file and os.path.exists("clone_history.txt"):
             with open("clone_history.txt", "r", encoding='utf-8') as f:
                 for line in f:
                     if not line.startswith("Grupo de origen:"):
@@ -990,9 +1097,14 @@ def main(args=None):
                                     history_omitted.add(num)
                             except ValueError:
                                 continue
+        elif spawn_file and os.path.exists("clone_spawn.txt"):
+            with open("clone_spawn.txt", "r", encoding='utf-8') as f_spawn:
+                data_spawn = json.load(f_spawn)
+                ranges = data_spawn.get("ranges", [])
+                # Aquí podrías cargar información adicional si es necesario
 
         while True:
-            if NEW in [1, 2, 3]:
+            if NEW in [1, 2, 3, 4]:
                 while message_id < last_message_id:
                     if PAUSE_EVENT.is_set():
                         PAUSE_EVENT.clear()
@@ -1024,10 +1136,31 @@ def main(args=None):
                             nombre="Empty Message",
                             file_id="N/A",
                             tipo="empty",
-                            status="salteado"
+                            status="salteado",
+                            spawn=spawn_file
                         )
                         print(f"{message_id}/{last_message_id}")
                         continue
+
+                    # Verificar si estamos en modo 4 y si el mensaje está dentro de los rangos
+                    if NEW == 4:
+                        if not is_message_in_ranges(message_id, None, ranges):
+                            list_posted.append(message.id)
+                            update_cache(CACHE_FILE, list_posted)
+                            log_clone_history(
+                                ORIGIN_CHAT_TITLE,
+                                [chat_input for chat_input, _ in destination_chats],
+                                posicion=message_id,
+                                numero=message_id,
+                                nombre=get_caption(message) if get_caption(message) else "<loose-image>",
+                                file_id=get_file_id(message),
+                                tipo=get_message_type(message),
+                                status="salteado",
+                                spawn=spawn_file
+                            )
+                            print(f"{message_id}/{last_message_id} (se omitió fuera de rango)")
+                            wait_a_moment(message_id, DELAY_AMOUNT, DELAY_SKIP, skip=True)
+                            continue
 
                     func_sender = get_sender(message)
                     if func_sender is None:
@@ -1041,7 +1174,8 @@ def main(args=None):
                             nombre="Unsupported Message",
                             file_id="N/A",
                             tipo=get_message_type(message),
-                            status="salteado"
+                            status="salteado",
+                            spawn=spawn_file
                         )
                         print(f"{message_id}/{last_message_id}")
                         continue
@@ -1058,7 +1192,8 @@ def main(args=None):
                             nombre=get_caption(message) if get_caption(message) else "<loose-image>",
                             file_id=get_file_id(message),
                             tipo=get_message_type(message),
-                            status="salteado"
+                            status="salteado",
+                            spawn=spawn_file
                         )
                         wait_a_moment(message_id, DELAY_AMOUNT, DELAY_SKIP, skip=True)
                         continue
@@ -1107,7 +1242,8 @@ def main(args=None):
                                     nombre=get_caption(msg) if get_caption(msg) else "<loose-image>",
                                     file_id=get_file_id(msg),
                                     tipo=get_message_type(msg),
-                                    status="clonado"
+                                    status="clonado",
+                                    spawn=spawn_file
                                 )
                             update_cache(CACHE_FILE, list_posted)
                             wait_a_moment(message_id, DELAY_AMOUNT, DELAY_SKIP)
@@ -1121,6 +1257,9 @@ def main(args=None):
                         continue
 
                     else:
+                        if NEW == 4 and is_message_in_ranges(message_id, None, ranges):
+                            # En modo 4, clonar únicamente dentro de los rangos
+                            pass  # Continuar con el reenvío
                         if limit_images and func_sender == forward_photo:
                             pending_images.append(message)
                             if len(pending_images) >= max_standalone_images:
@@ -1141,7 +1280,8 @@ def main(args=None):
                                             nombre=get_caption(msg) if get_caption(msg) else "<loose-image>",
                                             file_id=get_file_id(msg),
                                             tipo=get_message_type(msg),
-                                            status="clonado"
+                                            status="clonado",
+                                            spawn=spawn_file
                                         )
                                     update_cache(CACHE_FILE, list_posted)
                                     pending_images = []
@@ -1162,7 +1302,8 @@ def main(args=None):
                                     nombre=get_caption(message) if get_caption(message) else "<loose-image>",
                                     file_id=get_file_id(message),
                                     tipo=get_message_type(message),
-                                    status="clonado"
+                                    status="clonado",
+                                    spawn=spawn_file
                                 )
                                 for dest_input, dest_id in destination_chats:
                                     attempts = 0
@@ -1187,7 +1328,8 @@ def main(args=None):
                                 nombre=get_caption(message) if get_caption(message) else "<loose-image>",
                                 file_id=get_file_id(message),
                                 tipo=get_message_type(message),
-                                status="clonado"
+                                status="clonado",
+                                spawn=spawn_file
                             )
                             for dest_input, dest_id in destination_chats:
                                 attempts = 0
@@ -1211,27 +1353,23 @@ def main(args=None):
                         print("Saliendo del programa.")
                         os._exit(0)
 
-            else:
-                print("Opción de tarea no válida.")
-                break
+            print(
+                "\n¡Clonación del chat completada! :)\n"
+                + "Si no vas a continuar esta tarea para estos chats, "
+                + "elimina el archivo posted.json o clone_spawn.txt"
+            )
 
-        print(
-            "\n¡Clonación del chat completada! :)\n"
-            + "Si no vas a continuar esta tarea para estos chats, "
-            + "elimina el archivo posted.json"
-        )
-
-        while True:
-            final_option = input("¿Deseas iniciar una nueva clonación? (Y/N): ").strip().upper()
-            if final_option == "Y":
-                print("\nReiniciando el proceso de clonación...\n")
-                NEW = task_type_selection()
-                break
-            elif final_option == "N":
-                print("\nFinalizando el programa. ¡Hasta luego!")
-                exit(0)
-            else:
-                print("Opción inválida. Por favor, ingresa 'Y' o 'N'.")
+            while True:
+                final_option = input("¿Deseas iniciar una nueva clonación? (Y/N): ").strip().upper()
+                if final_option == "Y":
+                    print("\nReiniciando el proceso de clonación...\n")
+                    NEW = task_type_selection()
+                    break
+                elif final_option == "N":
+                    print("\nFinalizando el programa. ¡Hasta luego!")
+                    exit(0)
+                else:
+                    print("Opción inválida. Por favor, ingresa 'Y' o 'N'.")
 
 
 if __name__ == "__main__":
