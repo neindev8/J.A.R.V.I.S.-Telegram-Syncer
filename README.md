@@ -1,6 +1,6 @@
 # J.A.R.V.I.S. Telegram Syncer
 
-![Version](https://img.shields.io/badge/version-0.5.3%20rawr3-brightgreen)
+![Version](https://img.shields.io/badge/version-0.5.3%20rawr4-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
 ## 📚 Descripción
