@@ -430,6 +430,9 @@ def task_type_selection():
 
 
 def get_last_message_id(origin_chat):
+    if tg.is_bot:
+        print("No se puede obtener el historial de mensajes en modo bot. Estableciendo last_message_id a 0.")
+        return 0
     try:
         iter_message = tg.get_chat_history(origin_chat)
         message = next(iter_message)
@@ -440,6 +443,7 @@ def get_last_message_id(origin_chat):
     except Exception as e:
         print(f"Error inesperado al obtener el último mensaje: {e}")
         return 0
+
 
 
 def is_empty_message(message, message_id, last_message_id):
@@ -802,8 +806,8 @@ def main(args=None):
     global tg, FILES_TYPE_EXCLUDED, DELAY_AMOUNT, DELAY_SKIP, destination_chats
 
     print(
-        f"\n....:: J.A.R.V.I.S. Telegram Syncer - Savage Version 0.5.3 rawr2 ::....\n"
-        + "github.com/apenasrr/clonechat/\n"
+        f"\n....:: J.A.R.V.I.S. Telegram Syncer - Savage Version 0.5.3 rawr3 ::....\n"
+        + "github.com/neindev8/J.A.R.V.I.S.-Telegram-Syncer/\n"
     )
 
     config_path = os.path.join("user", "config.ini")
